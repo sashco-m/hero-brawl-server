@@ -23,13 +23,38 @@ clients = []
 # BATTLE SOCKET
 # Streams game state to client
 
+# Handle client message
+def handle_client_message(client_id, message):
+    event = json.loads(message)
+    event_type = event.get('type') 
+    data = event.get('data')
+
+    if event_type == 'unit_placed':
+        with state_lock:
+            # Assume data includes unit placement info
+            board_state.place_unit(
+                client_id, 
+                mini_pekka.MiniPekka(data['id'], data['x'], data['y'])
+            )
+    print(f"Handled action from player {client_id}: {message}")
+
+# Thread for handling WebSocket messages from each client
+def handle_ws_messages(ws, client_id):
+    try:
+        while ws.connected:
+            message = ws.receive()
+            if message:
+                handle_client_message(client_id, message)
+    except Exception as e:
+        print(f"Error receiving message from client {client_id}: {e}")
+    finally:
+        print(f"Client {client_id} disconnected")
+
+
 @sock.route('/battle')
 def battle(ws):
     # Add the client to the list of connected clients
     clients.append(ws)
-
-    # ping back connection opened, ready to accept player ID
-    ws.send("success")
 
     print("IN BATTLE")
     # Set the client ID
@@ -37,6 +62,9 @@ def battle(ws):
     print("Client ID:", client_id)
     with state_lock:
         board_state.add_player(client_id)
+
+    # Start thread for handling WebSocket messages
+    threading.Thread(target=handle_ws_messages, args=(ws, client_id), daemon=True).start()
 
     try:
         while True:
@@ -53,32 +81,6 @@ def battle(ws):
     finally:
         # Remove the client from the list of connected clients
         clients.remove(ws)
-
-# ADD PIECE ENDPOINT
-bp = Blueprint('battle', __name__, url_prefix='/battle')
-
-@bp.route('/add-piece', methods=['POST'])
-def battle():
-    data = request.get_json()
-    print("input: ", data)
-    
-    with state_lock:
-        # TODO add based on type
-        piece_type = data['type']
-        player_id = request.headers['PlayerId']
-
-        board_state.place_unit(
-            player_id, 
-            mini_pekka.MiniPekka(data['id'], data['x'], data['y'])
-        )
-
-        print("Board state updated:", board_state)
-
-
-    return {
-        "status": "ok"
-    }
-
 
 # Background thread for game logic
 
@@ -102,4 +104,5 @@ def init_app(app):
     updater_thread.start()
     
     # Register the blueprint
-    app.register_blueprint(bp)
+    # TODO add back once we need rest
+    # app.register_blueprint(bp)
