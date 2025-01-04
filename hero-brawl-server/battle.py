@@ -10,6 +10,8 @@ from .model import serialize_game, model
 
 from pprint import pprint
 
+import queue
+
 # TODO move to own class
 # BOARD STATE
 board_state = model.Model()
@@ -20,22 +22,26 @@ state_lock = threading.Lock()
 # List to keep track of connected WebSocket clients
 clients = []
 
+# Queue the actions to happen on each tick
+# TODO split out per game session
+action_queue = queue.Queue()
+
 # BATTLE SOCKET
 # Streams game state to client
 
 # Handle client message
+# must have state lock acquired
 def handle_client_message(client_id, message):
     event = json.loads(message)
     event_type = event.get('type') 
     data = event.get('data')
 
     if event_type == 'unit_placed':
-        with state_lock:
-            # Assume data includes unit placement info
-            board_state.place_unit(
-                client_id, 
-                mini_pekka.MiniPekka(data['id'], data['x'], data['y'])
-            )
+        # Assume data includes unit placement info
+        board_state.place_unit(
+            client_id, 
+            mini_pekka.MiniPekka(data['id'], data['x'], data['y'])
+        )
     print(f"Handled action from player {client_id}: {message}")
 
 # Thread for handling WebSocket messages from each client
@@ -44,7 +50,7 @@ def handle_ws_messages(ws, client_id):
         while ws.connected:
             message = ws.receive()
             if message:
-                handle_client_message(client_id, message)
+                action_queue.put((client_id, message))
     except Exception as e:
         print(f"Error receiving message from client {client_id}: {e}")
     finally:
@@ -87,6 +93,11 @@ def battle(ws):
 def update_pieces():
     while True:
         with state_lock:
+            # process new actions
+            while not action_queue.empty():
+                action = action_queue.get()
+                handle_client_message(*action)
+
             # Update the position of each piece
             for player in board_state.players.values():
                 for piece in player.pieces:
