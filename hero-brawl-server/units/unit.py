@@ -8,6 +8,8 @@ class Unit(ABC):
         # Current X/Y
         self.x = x
         self.y = y
+        # unit or tower, move or attack
+        self.target = None
 
     # movement delta for tick
     @property

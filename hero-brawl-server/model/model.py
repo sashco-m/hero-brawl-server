@@ -1,9 +1,4 @@
-
-# TODO
-# Send a playerID or infer it from the socket connection (socketID?)
-# use this socketId as the player key for the pieces
-# store the pieces exactly as each client sends
-
+from ..towers import tower
 # LIMITATIONS
 # Only support 1 game at a time for now
 # To improve, keep map of gameID to model (state)
@@ -13,6 +8,10 @@ class Player():
     def __init__(self, id):
         self.id = id
         self.pieces = []
+        # towers
+        self.king_tower = tower.KingTower()
+        self.left_tower = tower.PrincessTower()
+        self.right_tower = tower.PrincessTower()
     
     def add_unit(self, unit):
         self.pieces.append(unit)
